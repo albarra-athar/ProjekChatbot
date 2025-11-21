@@ -1,0 +1,53 @@
+---
+const title = "Chatbot Tugas Kuliah";
+---
+
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <title>{title}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 2rem;
+        background: #f5f6fa;
+      }
+      h1 {
+        margin-bottom: 1rem;
+      }
+      .info {
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>{title}</h1>
+
+    <div class="info">
+      <p>Halo! Ini adalah chatbot untuk tracking tugas kuliah.</p>
+      <p>Contoh perintah:</p>
+      <ul>
+        <li>"Tambah tugas Kalkulus besok jam 23.59 judul laporan praktikum"</li>
+        <li>"Tugas hari ini apa saja"</li>
+        <li>"Tugas Kalkulus yang belum selesai apa"</li>
+      </ul>
+    </div>
+
+<script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
+<df-messenger
+  intent="WELCOME"
+  chat-title="Chatbot_Tugas_Kuliah"
+  agent-id="e6380229-e150-4622-8273-ba23458ecf91"
+  language-code="id"
+></df-messenger>
+
+    <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
+  </body>
+</html>
+
