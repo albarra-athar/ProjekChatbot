@@ -40,6 +40,26 @@ function asString(v: any, fallback = ""): string {
   return String(v);
 }
 
+// Normalisasikan nama mata kuliah / course
+// - hapus kata-kata umum yang tidak diperlukan seperti "tugas", "mata kuliah", "matakuliah", "untuk"
+// - kembalikan dalam huruf kecil tanpa spasi ekstra
+function sanitizeCourse(v: any): string {
+  let s = asString(v, "").toLowerCase().trim();
+  if (!s) return "";
+  // Hapus frasa umum seperti "mata kuliah" atau "matakuliah"
+  s = s.replace(/\b(mata ?kuliah|matakuliah)\b/gi, "");
+  // Hapus kata "tugas" dalam berbagai bentuk, termasuk "tugasnya"
+  s = s.replace(/\b(tugas)(nya)?\b/gi, "");
+  // Hapus kata penghubung yang sering muncul: "untuk", "tentang", "mengenai"
+  s = s.replace(/\b(untuk|tentang|mengenai)\b/gi, "");
+  // Ganti tanda baca/penanda pemisah jadi spasi, lalu hapus karakter non-alfanumerik
+  s = s.replace(/[:\-–—]/g, " ");
+  s = s.replace(/[^a-z0-9\s]/gi, "");
+  // Hilangkan spasi berlebih dan trim
+  s = s.replace(/\s+/g, " ").trim();
+  return s;
+}
+
 // Parsel @sys.date jadi "YYYY-MM-DD"
 function parseDate(date?: string): string | null {
   if (!date) return null;
@@ -85,7 +105,8 @@ export async function POST({ request }: { request: Request }) {
       intentName === "tambah tugas"
     ) {
       const title = asString(params.title, "Tanpa judul").trim();
-      const course = asString(params.course, "Umum").trim();
+      const courseRaw = asString(params.course, "Umum").trim();
+      const course = sanitizeCourse(courseRaw) || "umum";
       const dueDate = asString(params.due_date, "");
       const dueTime = asString(params.due_time, "");
       const priorityRaw = asString(params.priority, "medium").toLowerCase();
@@ -130,7 +151,7 @@ export async function POST({ request }: { request: Request }) {
         return ok("Mata kuliahnya apa? Misalnya: Kalkulus, Fisika Dasar, dst.");
       }
 
-      const course = courseParam.toLowerCase();
+      const course = sanitizeCourse(courseParam) || courseParam.toLowerCase();
 
       const [rows] = await pool.execute(
         `
