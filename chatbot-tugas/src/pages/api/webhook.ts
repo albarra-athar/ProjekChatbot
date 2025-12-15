@@ -1,8 +1,7 @@
 // Supaya route ini hanya dijalankan di server
 export const prerender = false;
 
-import pkg from "pg";
-const { Pool } = pkg;
+import { Pool } from "pg";
 
 // Bentuk body dari Dialogflow
 type DFParameters = { [key: string]: any };
