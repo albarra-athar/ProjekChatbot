@@ -1,7 +1,8 @@
 // Supaya route ini hanya dijalankan di server
 export const prerender = false;
 
-import mysql from "mysql2/promise";
+import pkg from "pg";
+const { Pool } = pkg;
 
 // Bentuk body dari Dialogflow
 type DFParameters = { [key: string]: any };
@@ -13,13 +14,18 @@ interface DFRequestBody {
   };
 }
 
-// Pool koneksi MySQL (pakai .env)
-const pool = mysql.createPool({
+// Pool koneksi Postgres (Supabase) (pakai .env)
+const pool = new Pool({
   host: import.meta.env.DB_HOST,
+  port: Number(import.meta.env.DB_PORT ?? 5432),
   user: import.meta.env.DB_USER,
   password: import.meta.env.DB_PASS,
   database: import.meta.env.DB_NAME,
-  connectionLimit: 10,
+  max: 10,
+  ssl:
+    import.meta.env.DB_SSL === "true"
+      ? { rejectUnauthorized: false }
+      : undefined,
 });
 
 // Helper untuk balasan ke Dialogflow
@@ -124,11 +130,11 @@ export async function POST({ request }: { request: Request }) {
       const priority = mapPriority[priorityRaw] ?? "medium";
       const dueAt = buildDateTime(dueDate, dueTime);
 
-      await pool.execute(
+      await pool.query(
         `
         INSERT INTO tasks (user_id, title, course, due_at, priority, status)
-        VALUES (?, ?, ?, ?, ?, 'todo')
-      `,
+        VALUES ($1, $2, $3, $4, $5, 'todo')
+        `,
         [userId, title, course, dueAt, priority]
       );
 
@@ -153,31 +159,29 @@ export async function POST({ request }: { request: Request }) {
 
       const course = sanitizeCourse(courseParam) || courseParam.toLowerCase();
 
-      const [rows] = await pool.execute(
+      const { rows } = await pool.query(
         `
         SELECT 
           title,
-          DATE_FORMAT(due_at, '%Y-%m-%d %H:%i') AS due_at,
+          to_char(due_at, 'YYYY-MM-DD HH24:MI') AS due_at,
           priority,
           status
         FROM tasks
-        WHERE user_id = ?
-          AND LOWER(course) = ?
+        WHERE user_id = $1
+          AND lower(course) = $2
           AND status <> 'done'
         ORDER BY due_at ASC
-      `,
+        `,
         [userId, course]
       );
 
-      const list = Array.isArray(rows) ? (rows as any[]) : [];
-
-      if (!list.length) {
+      if (!rows.length) {
         return ok(
           `Belum ada tugas (atau semua sudah selesai) untuk mata kuliah ${courseParam}.`
         );
       }
 
-      const text = list
+      const text = rows
         .map(
           (r) =>
             `• ${r.title} — ${r.due_at} (prioritas: ${r.priority}, status: ${r.status})`
@@ -203,30 +207,28 @@ export async function POST({ request }: { request: Request }) {
       const from = `${dateOnly} 00:00:00`;
       const to = `${dateOnly} 23:59:59`;
 
-      const [rows] = await pool.execute(
+      const { rows } = await pool.query(
         `
         SELECT 
           title,
           course,
-          DATE_FORMAT(due_at, '%Y-%m-%d %H:%i') AS due_at,
+          to_char(due_at, 'YYYY-MM-DD HH24:MI') AS due_at,
           priority,
           status
         FROM tasks
-        WHERE user_id = ?
-          AND due_at BETWEEN ? AND ?
+        WHERE user_id = $1
+          AND due_at BETWEEN $2 AND $3
           AND status <> 'done'
         ORDER BY due_at ASC
-      `,
+        `,
         [userId, from, to]
       );
 
-      const list = Array.isArray(rows) ? (rows as any[]) : [];
-
-      if (!list.length) {
+      if (!rows.length) {
         return ok(`Tidak ada tugas yang belum selesai pada tanggal ${dateOnly}.`);
       }
 
-      const text = list
+      const text = rows
         .map(
           (r) =>
             `• ${r.title} [${r.course}] — ${r.due_at} (prioritas: ${r.priority})`
@@ -269,35 +271,30 @@ export async function POST({ request }: { request: Request }) {
 
       const status = mapStatus[statusRaw] ?? "todo";
 
-      const [result] = (await pool.execute(
+      const res = await pool.query(
         `
         UPDATE tasks 
-        SET status = ?
-        WHERE user_id = ?
-          AND LOWER(title) = ?
-      `,
+        SET status = $1
+        WHERE user_id = $2
+          AND lower(title) = $3
+        `,
         [status, userId, titleParam.toLowerCase()]
-      )) as any[];
+      );
 
-      if (!result.affectedRows) {
-        return ok(
-          `Tugas dengan judul "${titleParam}" tidak ditemukan di database.`
-        );
+      if (!res.rowCount) {
+        return ok(`Tugas dengan judul "${titleParam}" tidak ditemukan di database.`);
       }
 
-      return ok(
-        `Status tugas "${titleParam}" sudah diubah menjadi ${status}.`
-      );
+      return ok(`Status tugas "${titleParam}" sudah diubah menjadi ${status}.`);
     }
 
     // ==============================================
     // 5) DEFAULT: kalau intent tidak dikenali di webhook
     // ==============================================
-    return ok(
-      "Webhook sudah menerima pesan, tapi intent ini belum di-handle di server."
-    );
+    return ok("Webhook sudah menerima pesan, tapi intent ini belum di-handle di server.");
   } catch (err: any) {
     console.error("Webhook error:", err);
     return ok("Terjadi error di server: " + (err?.message ?? "unknown error"));
   }
 }
+
